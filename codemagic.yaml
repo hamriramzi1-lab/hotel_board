@@ -1,0 +1,15 @@
+workflows:
+  android-build:
+    name: Build Android APK
+    max_build_duration: 30
+    instance_type: mac_mini_m1
+    environment:
+      flutter: stable
+    scripts:
+      - name: Build APK
+        script: |
+          cd hotel_board
+          flutter build apk --release
+    artifacts:
+      - hotel_board/build/app/outputs/flutter-apk/*.apk
+      
