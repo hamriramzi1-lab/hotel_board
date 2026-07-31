@@ -1,3 +1,4 @@
+
 workflows:
   android-build:
     name: Build Android APK
@@ -12,4 +13,3 @@ workflows:
           flutter build apk --release
     artifacts:
       - hotel_board/build/app/outputs/flutter-apk/*.apk
-      
