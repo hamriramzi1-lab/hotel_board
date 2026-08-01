@@ -150,7 +150,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black70)),
+        Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black.withOpacity(0.7))),
         const SizedBox(height: 4),
         _buildRoomGrid(roomList, cardColor, RoomStatus.libre, isGLSection: isGL),
       ],
