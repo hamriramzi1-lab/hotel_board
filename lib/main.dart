@@ -30,7 +30,7 @@ class Room {
   final double price;
   RoomStatus status;
   String? pairedWith;
-  double billedAmount;
+  double billedAmount; // Garde en mémoire EXACTEMENT ce qui a été ajouté au total
 
   Room({
     required this.number,
@@ -42,7 +42,6 @@ class Room {
   });
 }
 
-// Classe pour stocker l'historique d'un jour passé
 class DailyHistory {
   final String date;
   final double amount;
@@ -81,7 +80,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   ];
 
   double totalRecette = 0.0;
-  List<DailyHistory> historyList = []; // Liste de l'historique des jours passés
+  List<DailyHistory> historyList = [];
 
   Room? selectedGLForCouple;
   bool isCoupleMode = false;
@@ -92,16 +91,12 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Clôture automatique à minuit + Sauvegarde dans l'historique
     _midnightTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       final now = DateTime.now();
       if (now.day != _currentDate.day) {
         setState(() {
-          // Sauvegarder le total du jour qui s'achève
           final formattedDate = "${_currentDate.day}/${_currentDate.month}/${_currentDate.year}";
           historyList.insert(0, DailyHistory(date: formattedDate, amount: totalRecette));
-          
-          // Réinitialiser pour la nouvelle journée
           _currentDate = now;
           totalRecette = 0.0;
         });
@@ -115,7 +110,6 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     super.dispose();
   }
 
-  // Afficher la boîte de dialogue de l'historique
   void _showHistoryDialog() {
     showDialog(
       context: context,
@@ -132,7 +126,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
           child: historyList.isEmpty
               ? const Padding(
                   padding: EdgeInsets.all(16.0),
-                  child: Text('Aucune journée enregistrée dans l\'historique pour l\'instant.',
+                  child: Text('Aucune journée enregistrée dans l\'historique.',
                       textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                 )
               : ListView.builder(
@@ -178,7 +172,6 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
       ),
       body: Column(
         children: [
-          // Banner Recette + Date + Bouton Historique
           Container(
             padding: const EdgeInsets.all(16.0),
             color: Colors.blue.shade50,
@@ -214,7 +207,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                   const SizedBox(height: 10),
                   Chip(
                     avatar: const Icon(Icons.add_circle, color: Colors.white),
-                    label: Text('Couple: Ch ${selectedGLForCouple?.number} + LD ?'),
+                    label: Text('Couple: Ch ${selectedGLForCouple?.number} + Sélectionner LD'),
                     backgroundColor: Colors.orange,
                     labelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     onDeleted: () {
@@ -344,23 +337,27 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
           if (room.type == 'LD' && selectedGLForCouple != null) {
             final glRoom = selectedGLForCouple!;
 
+            // Passage en occupée pour la chambre GL
             glRoom.status = RoomStatus.occupee;
             glRoom.pairedWith = room.number;
-            glRoom.billedAmount = glRoom.price;
+            glRoom.billedAmount = glRoom.price; // Enregistre 5000 DA sur la GL
 
+            // Passage en occupée pour la chambre LD
             room.status = RoomStatus.occupee;
             room.pairedWith = glRoom.number;
-            room.billedAmount = 0.0;
+            room.billedAmount = 0.0; // Enregistre 0 DA sur la LD
 
-            totalRecette += glRoom.price;
+            // AJOUT UNIQUE : Seul le montant GL est ajouté au grand total
+            totalRecette += glRoom.billedAmount;
 
             isCoupleMode = false;
             selectedGLForCouple = null;
           }
         } else {
+          // Réservation simple
           room.status = RoomStatus.occupee;
           room.billedAmount = room.price;
-          totalRecette += room.price;
+          totalRecette += room.billedAmount;
         }
       });
     } else if (room.status == RoomStatus.occupee) {
@@ -373,7 +370,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.cleaning_services, color: Colors.orange),
                   title: const Text('Départ client (Envoyer en chambre Sale)'),
-                  subtitle: const Text('La chambre se libère seule, le montant reste comptabilisé'),
+                  subtitle: const Text('La chambre se libère seule, le paiement reste conservé'),
                   onTap: () {
                     Navigator.pop(context);
                     _checkoutSingleRoom(room);
@@ -382,7 +379,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.cancel, color: Colors.red),
                   title: const Text('Annuler la réservation'),
-                  subtitle: const Text('Remets la chambre en libre et déduit le prix du total'),
+                  subtitle: const Text('Remets la chambre en libre et déduit son montant exact du total'),
                   onTap: () {
                     Navigator.pop(context);
                     _cancelReservation(room);
@@ -403,8 +400,9 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   void _checkoutSingleRoom(Room room) {
     setState(() {
       room.status = RoomStatus.sale;
-      room.billedAmount = 0.0;
-
+      // Remarque : room.billedAmount n'est PAS soustrait car le séjour a eu lieu.
+      
+      // Séparer le couple s'il y en avait un, sans modifier le statut de l'autre chambre
       if (room.pairedWith != null) {
         final otherRoomIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
         if (otherRoomIndex != -1) {
@@ -417,6 +415,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
 
   void _cancelReservation(Room room) {
     setState(() {
+      // Soustraire EXACTEMENT le montant facturé lors de la réservation de cette chambre
       totalRecette -= room.billedAmount;
       if (totalRecette < 0) totalRecette = 0.0;
 
