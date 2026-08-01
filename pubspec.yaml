@@ -1,4 +1,4 @@
-Name: hotel_board
+name: hotel_board
 description: Application de gestion de tableau de bord d hotel
 publish_to: 'none'
 version: 1.0.0+1
