@@ -30,7 +30,7 @@ class Room {
   final double price;
   RoomStatus status;
   String? pairedWith;
-  double billedAmount; // Garde en mémoire EXACTEMENT ce qui a été ajouté au total
+  double priceCharged; // Montant réellement facturé pour cette chambre
 
   Room({
     required this.number,
@@ -38,7 +38,7 @@ class Room {
     required this.price,
     this.status = RoomStatus.libre,
     this.pairedWith,
-    this.billedAmount = 0.0,
+    this.priceCharged = 0.0,
   });
 }
 
@@ -91,6 +91,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Reinitialisation auto a Minuit
     _midnightTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       final now = DateTime.now();
       if (now.day != _currentDate.day) {
@@ -337,18 +338,17 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
           if (room.type == 'LD' && selectedGLForCouple != null) {
             final glRoom = selectedGLForCouple!;
 
-            // Passage en occupée pour la chambre GL
+            // Association explicite des 2 chambres
             glRoom.status = RoomStatus.occupee;
             glRoom.pairedWith = room.number;
-            glRoom.billedAmount = glRoom.price; // Enregistre 5000 DA sur la GL
+            glRoom.priceCharged = glRoom.price; // 5000 DA sur GL
 
-            // Passage en occupée pour la chambre LD
             room.status = RoomStatus.occupee;
             room.pairedWith = glRoom.number;
-            room.billedAmount = 0.0; // Enregistre 0 DA sur la LD
+            room.priceCharged = 0.0; // 0 DA sur LD
 
-            // AJOUT UNIQUE : Seul le montant GL est ajouté au grand total
-            totalRecette += glRoom.billedAmount;
+            // Ajout unique du tarif GL
+            totalRecette += glRoom.priceCharged;
 
             isCoupleMode = false;
             selectedGLForCouple = null;
@@ -356,8 +356,8 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
         } else {
           // Réservation simple
           room.status = RoomStatus.occupee;
-          room.billedAmount = room.price;
-          totalRecette += room.billedAmount;
+          room.priceCharged = room.price;
+          totalRecette += room.priceCharged;
         }
       });
     } else if (room.status == RoomStatus.occupee) {
@@ -370,7 +370,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.cleaning_services, color: Colors.orange),
                   title: const Text('Départ client (Envoyer en chambre Sale)'),
-                  subtitle: const Text('La chambre se libère seule, le paiement reste conservé'),
+                  subtitle: const Text('La chambre passe seule en sale, le paiement reste conservé'),
                   onTap: () {
                     Navigator.pop(context);
                     _checkoutSingleRoom(room);
@@ -379,7 +379,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.cancel, color: Colors.red),
                   title: const Text('Annuler la réservation'),
-                  subtitle: const Text('Remets la chambre en libre et déduit son montant exact du total'),
+                  subtitle: const Text('Remets la chambre en libre et déduit le prix du total'),
                   onTap: () {
                     Navigator.pop(context);
                     _cancelReservation(room);
@@ -397,35 +397,36 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     }
   }
 
+  // Départ individuel
   void _checkoutSingleRoom(Room room) {
     setState(() {
       room.status = RoomStatus.sale;
-      // Remarque : room.billedAmount n'est PAS soustrait car le séjour a eu lieu.
-      
-      // Séparer le couple s'il y en avait un, sans modifier le statut de l'autre chambre
+      room.priceCharged = 0.0;
+
+      // On délie cette chambre sans toucher à l'état de la chambre partenaire
       if (room.pairedWith != null) {
-        final otherRoomIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
-        if (otherRoomIndex != -1) {
-          rooms[otherRoomIndex].pairedWith = null;
+        final pairedIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
+        if (pairedIndex != -1) {
+          rooms[pairedIndex].pairedWith = null;
         }
         room.pairedWith = null;
       }
     });
   }
 
+  // Annulation
   void _cancelReservation(Room room) {
     setState(() {
-      // Soustraire EXACTEMENT le montant facturé lors de la réservation de cette chambre
-      totalRecette -= room.billedAmount;
+      totalRecette -= room.priceCharged;
       if (totalRecette < 0) totalRecette = 0.0;
 
       room.status = RoomStatus.libre;
-      room.billedAmount = 0.0;
+      room.priceCharged = 0.0;
 
       if (room.pairedWith != null) {
-        final otherRoomIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
-        if (otherRoomIndex != -1) {
-          rooms[otherRoomIndex].pairedWith = null;
+        final pairedIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
+        if (pairedIndex != -1) {
+          rooms[pairedIndex].pairedWith = null;
         }
         room.pairedWith = null;
       }
