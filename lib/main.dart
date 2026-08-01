@@ -96,16 +96,13 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   List<Room> rooms = [];
   List<RoomTransaction> transactions = [];
 
-  Room? selectedGLForCouple;
-  bool isCoupleMode = false;
-
   @override
   void initState() {
     super.initState();
     _loadData();
   }
 
-  // --- SAUVEGARDE ET CHARGEMENT (SharedPreferences) ---
+  // --- SAUVEGARDE ET CHARGEMENT ---
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -160,7 +157,6 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     _saveData();
   }
 
-  // --- CALCULS RECETTES ---
   double get _recetteDuJour {
     final now = DateTime.now();
     return transactions
@@ -225,39 +221,15 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
               ],
             ),
           ),
-          if (isCoupleMode)
-            Container(
-              color: Colors.orange.shade100,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Couple : GL ${selectedGLForCouple?.number} sélectionné. Choisissez une chambre LD.',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        isCoupleMode = false;
-                        selectedGLForCouple = null;
-                      });
-                    },
-                    child: const Text('Annuler', style: TextStyle(color: Colors.red)),
-                  )
-                ],
-              ),
-            ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(12.0),
               children: [
                 const Text('🟢 Chambres Libres', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                _buildSubSection('Grand Lit (GL) & Suites', libresGL, Colors.green.shade100, isGL: true),
+                _buildSubSection('Grand Lit (GL) & Suites', libresGL, Colors.green.shade100),
                 const SizedBox(height: 8),
-                _buildSubSection('Lit Double (LD)', libresLD, Colors.teal.shade100, isGL: false),
+                _buildSubSection('Lit Double (LD)', libresLD, Colors.teal.shade100),
                 const Divider(height: 32, thickness: 2),
                 const Text('🔴 Chambres Occupées (Appui long pour annuler)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
@@ -274,18 +246,18 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     );
   }
 
-  Widget _buildSubSection(String title, List<Room> roomList, Color cardColor, {required bool isGL}) {
+  Widget _buildSubSection(String title, List<Room> roomList, Color cardColor) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black.withOpacity(0.7))),
         const SizedBox(height: 4),
-        _buildRoomGrid(roomList, cardColor, RoomStatus.libre, isGLSection: isGL),
+        _buildRoomGrid(roomList, cardColor, RoomStatus.libre),
       ],
     );
   }
 
-  Widget _buildRoomGrid(List<Room> roomList, Color cardColor, RoomStatus sectionStatus, {bool isGLSection = false}) {
+  Widget _buildRoomGrid(List<Room> roomList, Color cardColor, RoomStatus sectionStatus) {
     if (roomList.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 8.0),
@@ -305,53 +277,29 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
       itemCount: roomList.length,
       itemBuilder: (context, index) {
         final room = roomList[index];
-        final isSelectedForCouple = selectedGLForCouple?.number == room.number;
 
         return InkWell(
           onTap: () => _handleRoomTap(room),
           onLongPress: sectionStatus == RoomStatus.occupee ? () => _confirmCancelDialog(room) : null,
           child: Container(
             decoration: BoxDecoration(
-              color: isSelectedForCouple ? Colors.orange.shade200 : cardColor,
+              color: cardColor,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isSelectedForCouple ? Colors.orange : Colors.black12,
-                width: isSelectedForCouple ? 3 : 1,
-              ),
+              border: Border.all(color: Colors.black12),
             ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Ch ${room.number}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
-                      Text('${room.price.toStringAsFixed(0)} DA', style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                      if (room.pairedWith != null)
-                        Text('↳ Linked: ${room.pairedWith}', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
-                    ],
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Ch ${room.number}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                ),
-                if (sectionStatus == RoomStatus.libre && isGLSection && !isCoupleMode)
-                  Positioned(
-                    right: 2,
-                    top: 2,
-                    child: IconButton(
-                      icon: const Icon(Icons.add_circle, color: Colors.orange, size: 22),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () {
-                        setState(() {
-                          isCoupleMode = true;
-                          selectedGLForCouple = room;
-                        });
-                      },
-                    ),
-                  ),
-              ],
+                  Text('${room.price.toStringAsFixed(0)} DA', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                  if (room.pairedWith != null)
+                    Text('↳ Linked: ${room.pairedWith}', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+                ],
+              ),
             ),
           ),
         );
@@ -359,58 +307,151 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     );
   }
 
+  // Clic sur une chambre
   void _handleRoomTap(Room room) {
-    setState(() {
-      if (room.status == RoomStatus.libre) {
-        if (isCoupleMode) {
-          if (room.type == 'LD' && selectedGLForCouple != null) {
-            final glRoom = selectedGLForCouple!;
-            glRoom.status = RoomStatus.occupee;
-            glRoom.pairedWith = room.number;
-
-            room.status = RoomStatus.occupee;
-            room.pairedWith = glRoom.number;
-
-            // On ajoute la transaction uniquement pour la chambre GL (5000 DA)
-            transactions.add(RoomTransaction(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              roomInfo: 'Couple (Ch ${glRoom.number} / Ch ${room.number})',
-              amount: glRoom.price,
-              date: DateTime.now(),
-            ));
-
-            isCoupleMode = false;
-            selectedGLForCouple = null;
-          }
-        } else {
-          room.status = RoomStatus.occupee;
-          transactions.add(RoomTransaction(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            roomInfo: 'Chambre ${room.number}',
-            amount: room.price,
-            date: DateTime.now(),
-          ));
-        }
-      } else if (room.status == RoomStatus.occupee) {
-        // Envoi vers chambre sale INDIVIDUELLEMENT
+    if (room.status == RoomStatus.libre) {
+      _showRentalTypeDialog(room);
+    } else if (room.status == RoomStatus.occupee) {
+      // Passer en chambre sale individuellement
+      setState(() {
         room.status = RoomStatus.sale;
         if (room.pairedWith != null) {
-          // Si liée à un couple, on rompt le lien sur l'autre chambre qui reste occupée
           try {
-            final pairedRoom = rooms.firstWhere((r) => r.number == room.pairedWith);
-            pairedRoom.pairedWith = null;
+            final paired = rooms.firstWhere((r) => r.number == room.pairedWith);
+            paired.pairedWith = null;
           } catch (_) {}
           room.pairedWith = null;
         }
-      } else if (room.status == RoomStatus.sale) {
-        // De sale à libre par chambre unique
+      });
+      _saveData();
+    } else if (room.status == RoomStatus.sale) {
+      // Nettoyée -> Libre
+      setState(() {
         room.status = RoomStatus.libre;
-      }
+      });
+      _saveData();
+    }
+  }
+
+  // Dialogue de choix : Unique ou Couple
+  void _showRentalTypeDialog(Room room) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Location Chambre ${room.number}'),
+        content: const Text('Souhaitez-vous louer cette chambre en mode Unique ou Couple ?'),
+        actions: [
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _rentSingle(room);
+            },
+            child: const Text('Unique'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _showCouplePairingDialog(room);
+            },
+            child: const Text('Couple (2 chambres)'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Location unique
+  void _rentSingle(Room room) {
+    setState(() {
+      room.status = RoomStatus.occupee;
+      transactions.add(RoomTransaction(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        roomInfo: 'Chambre ${room.number}',
+        amount: room.price,
+        date: DateTime.now(),
+      ));
     });
     _saveData();
   }
 
-  // Dialogue d'annulation de réservation
+  // Dialogue d'association pour le mode Couple (Sélection obligatoire)
+  void _showCouplePairingDialog(Room firstRoom) {
+    // Si la 1ère chambre est GL ou Suite, on cherche une chambre LD libre.
+    // Si la 1ère est LD, on cherche une GL ou Suite libre.
+    final targetTypeIsLD = (firstRoom.type == 'GL' || firstRoom.type == 'Suite');
+    final availablePairRooms = rooms
+        .where((r) =>
+            r.status == RoomStatus.libre &&
+            r.number != firstRoom.number &&
+            (targetTypeIsLD ? r.type == 'LD' : (r.type == 'GL' || r.type == 'Suite')))
+        .toList();
+
+    if (availablePairRooms.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Impossible : Aucune chambre ${targetTypeIsLD ? 'LD' : 'GL/Suite'} libre à associer !'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Couple : Associer Ch ${firstRoom.number} à...'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: availablePairRooms.length,
+            itemBuilder: (context, index) {
+              final secondRoom = availablePairRooms[index];
+              return ListTile(
+                title: Text('Chambre ${secondRoom.number} (${secondRoom.type})'),
+                subtitle: Text('${secondRoom.price.toStringAsFixed(0)} DA (Offerte en Couple)'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _rentCouple(firstRoom, secondRoom);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler'),
+          )
+        ],
+      ),
+    );
+  }
+
+  // Valider la location Couple
+  void _rentCouple(Room room1, Room room2) {
+    setState(() {
+      room1.status = RoomStatus.occupee;
+      room1.pairedWith = room2.number;
+
+      room2.status = RoomStatus.occupee;
+      room2.pairedWith = room1.number;
+
+      // Déterminer la chambre GL / Suite à facturer
+      Room billedRoom = (room1.type == 'GL' || room1.type == 'Suite') ? room1 : room2;
+
+      transactions.add(RoomTransaction(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        roomInfo: 'Couple (Ch ${room1.number} / Ch ${room2.number})',
+        amount: billedRoom.price, // Seule la GL est facturée
+        date: DateTime.now(),
+      ));
+    });
+    _saveData();
+  }
+
   void _confirmCancelDialog(Room room) {
     showDialog(
       context: context,
@@ -434,7 +475,6 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
 
   void _cancelReservation(Room room) {
     setState(() {
-      // Retirer la transaction associée
       transactions.removeWhere((t) => t.roomInfo.contains(room.number));
 
       if (room.pairedWith != null) {
@@ -451,7 +491,6 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     _saveData();
   }
 
-  // Historique des recettes
   void _showHistoryDialog() {
     Map<String, List<RoomTransaction>> grouped = {};
     for (var tx in transactions) {
