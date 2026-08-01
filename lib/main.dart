@@ -30,7 +30,7 @@ class Room {
   final double price;
   RoomStatus status;
   String? pairedWith;
-  double priceCharged; // Stocke la somme exacte payée pour CETTE chambre
+  double priceCharged; // Enregistre l'encaissement REEL (0 DA pour la LD du couple)
 
   Room({
     required this.number,
@@ -326,9 +326,9 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   }
 
   void _handleRoomTap(Room room) {
-    // 1. GESTION DU MODE COUPLE (PRIORITÉ ABSOLUE)
+    // A. SI ON EST EN MODE SELECTION COUPLE
     if (isCoupleMode && selectedGLForCouple != null) {
-      // Si on clique sur la même GL pour annuler la sélection couple
+      // 1. Clic sur la même chambre GL -> Annulation du mode couple
       if (room.number == selectedGLForCouple!.number) {
         setState(() {
           isCoupleMode = false;
@@ -337,21 +337,21 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
         return;
       }
 
-      // Si on choisit une chambre LD libre pour terminer la réservation couple
+      // 2. Clic sur une chambre LD LIBRE -> Validation du couple
       if (room.status == RoomStatus.libre && room.type == 'LD') {
         setState(() {
           final glRoom = selectedGLForCouple!;
-          
-          // Occupation et liaison réciproque
+
+          // Passer les 2 chambres en occupées
           glRoom.status = RoomStatus.occupee;
           glRoom.pairedWith = room.number;
-          glRoom.priceCharged = glRoom.price; // 5000 DA enregistrés sur GL
+          glRoom.priceCharged = glRoom.price; // 5000 DA enregistrés
 
           room.status = RoomStatus.occupee;
           room.pairedWith = glRoom.number;
-          room.priceCharged = 0.0; // STRICTEMENT 0 DA sur la LD
+          room.priceCharged = 0.0; // STRICTEMENT 0 DA pour la LD !
 
-          // Seul le prix de la GL (5000 DA) est ajouté au total
+          // Ajout strict de 5000 DA au total (seule la GL est facturée)
           totalRecette += glRoom.priceCharged;
 
           isCoupleMode = false;
@@ -359,18 +359,21 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
         });
         return;
       }
+      
+      // Si clic sur une chambre invalide (ex: une chambre déjà occupée), on ignore le clic
+      return;
     }
 
-    // 2. CHAMBRE LIBRE (Réservation simple)
+    // B. MODE NORMAL (HORS SELECTION COUPLE)
     if (room.status == RoomStatus.libre) {
+      // Réservation Simple (1 seule chambre)
       setState(() {
         room.status = RoomStatus.occupee;
-        room.priceCharged = room.price;
+        room.priceCharged = room.price; // Prix plein (5000 DA ou 7000 DA)
         totalRecette += room.priceCharged;
       });
-    } 
-    // 3. CHAMBRE OCCUPÉE (Menu d'options)
-    else if (room.status == RoomStatus.occupee) {
+    } else if (room.status == RoomStatus.occupee) {
+      // Menu au clic sur chambre occupée
       showModalBottomSheet(
         context: context,
         builder: (BuildContext context) {
@@ -380,7 +383,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.cleaning_services, color: Colors.orange),
                   title: const Text('Départ client (Envoyer en chambre Sale)'),
-                  subtitle: const Text('Seule CETTE chambre passe en sale, l\'autre reste intacte.'),
+                  subtitle: const Text('Seule CETTE chambre passe en sale, l\'autre reste occupée.'),
                   onTap: () {
                     Navigator.pop(context);
                     _checkoutSingleRoom(room);
@@ -389,7 +392,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 ListTile(
                   leading: const Icon(Icons.cancel, color: Colors.red),
                   title: const Text('Annuler la réservation'),
-                  subtitle: const Text('Remets la chambre en libre et déduit le prix encaissé du total.'),
+                  subtitle: const Text('Remets la chambre en libre et rembourse le montant exact.'),
                   onTap: () {
                     Navigator.pop(context);
                     _cancelReservation(room);
@@ -400,21 +403,19 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
           );
         },
       );
-    } 
-    // 4. CHAMBRE SALE (Remettre en libre)
-    else if (room.status == RoomStatus.sale) {
+    } else if (room.status == RoomStatus.sale) {
+      // Remettre en libre après nettoyage
       setState(() {
         room.status = RoomStatus.libre;
       });
     }
   }
 
-  // Départ chambre par chambre (La chambre jumelle reste occupée)
+  // Départ individuel (Rompt la liaison sans altérer l'autre chambre)
   void _checkoutSingleRoom(Room room) {
     setState(() {
       room.status = RoomStatus.sale;
 
-      // Retire la liaison sur l'autre chambre sans la basculer en sale
       if (room.pairedWith != null) {
         final pairedIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
         if (pairedIndex != -1) {
@@ -425,7 +426,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
     });
   }
 
-  // Annulation complète de la réservation d'une chambre
+  // Annulation et déduction exacte de la recette
   void _cancelReservation(Room room) {
     setState(() {
       totalRecette -= room.priceCharged;
