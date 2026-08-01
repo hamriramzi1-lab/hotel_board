@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -73,6 +74,30 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   Room? selectedGLForCouple;
   bool isCoupleMode = false;
 
+  Timer? _timer;
+  int _lastDay = DateTime.now().day;
+
+  @override
+  void initState() {
+    super.initState();
+    // Clôture automatique du total à minuit
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      final now = DateTime.now();
+      if (now.day != _lastDay) {
+        setState(() {
+          _lastDay = now.day;
+          totalRecette = 0.0;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final libresGL = rooms.where((r) => r.status == RoomStatus.libre && (r.type == 'GL' || r.type == 'Suite')).toList();
@@ -98,7 +123,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Recette (Cumul) :', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                    const Text('Total Recette du Jour :', style: TextStyle(fontSize: 14, color: Colors.grey)),
                     Text(
                       '${totalRecette.toStringAsFixed(0)} DA',
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
@@ -108,7 +133,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 if (isCoupleMode)
                   Chip(
                     avatar: const Icon(Icons.add_circle, color: Colors.white),
-                    label: Text('Couple: GL ${selectedGLForCouple?.number} + LD ?'),
+                    label: Text('Couple: Ch ${selectedGLForCouple?.number} + LD ?'),
                     backgroundColor: Colors.orange,
                     labelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     onDeleted: () {
@@ -202,7 +227,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                       ),
                       Text('${room.price.toStringAsFixed(0)} DA', style: const TextStyle(fontSize: 12, color: Colors.black87)),
                       if (room.pairedWith != null)
-                        Text('↳ Linked: ${room.pairedWith}', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+                        Text('↳ Couple: ${room.pairedWith}', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -232,34 +257,44 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
 
   void _handleRoomTap(Room room) {
     setState(() {
+      // 1. SI LA CHAMBRE EST LIBRE
       if (room.status == RoomStatus.libre) {
         if (isCoupleMode) {
           if (room.type == 'LD' && selectedGLForCouple != null) {
             final glRoom = selectedGLForCouple!;
+            
             glRoom.status = RoomStatus.occupee;
             glRoom.pairedWith = room.number;
 
             room.status = RoomStatus.occupee;
             room.pairedWith = glRoom.number;
 
+            // PRIX COUPLE : On ajoute UNIQUEMENT le prix de la chambre GL (5000 DA)
             totalRecette += glRoom.price;
 
             isCoupleMode = false;
             selectedGLForCouple = null;
           }
         } else {
+          // Location seule
           room.status = RoomStatus.occupee;
           totalRecette += room.price;
         }
-      } else if (room.status == RoomStatus.occupee) {
+      } 
+      // 2. SI LA CHAMBRE EST OCCUPÉE (Départ unique)
+      else if (room.status == RoomStatus.occupee) {
         room.status = RoomStatus.sale;
+
+        // Si elle était liée à un couple, on retire le lien sur la chambre qui part
+        // L'autre chambre du couple RESTERA occupée séparément.
         if (room.pairedWith != null) {
-          final pairedRoom = rooms.firstWhere((r) => r.number == room.pairedWith);
-          pairedRoom.status = RoomStatus.sale;
+          final pairedRoom = rooms.firstWhere((r) => r.number == room.pairedWith, orElse: () => room);
           pairedRoom.pairedWith = null;
           room.pairedWith = null;
         }
-      } else if (room.status == RoomStatus.sale) {
+      } 
+      // 3. SI LA CHAMBRE EST SALE (Nettoyée)
+      else if (room.status == RoomStatus.sale) {
         room.status = RoomStatus.libre;
       }
     });
