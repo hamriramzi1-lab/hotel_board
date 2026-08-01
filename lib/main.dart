@@ -10,57 +10,34 @@ class HotelBoardApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Tableau d\'hôtel',
+      title: 'Hotel Board',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const DashboardScreen(),
+      home: const HotelHomeScreen(),
     );
   }
 }
 
-class Room {
-  final String number;
-  final String type; // GL (Grand Lit) ou LD (Lits Disjoints)
-  String status; // Libre, Occupée, Sale
-  double price;
-  String? notes;
-
-  Room({
-    required this.number,
-    required this.type,
-    this.status = 'Libre',
-    required this.price,
-    this.notes,
-  });
-}
-
-class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+class HotelHomeScreen extends StatefulWidget {
+  const HotelHomeScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  State<HotelHomeScreen> createState() => _HotelHomeScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  // Liste initiale des chambres de l'hôtel
-  final List<Room> rooms = [
-    Room(number: '101', type: 'GL', status: 'Libre', price: 4000),
-    Room(number: '102', type: 'LD', status: 'Occupée', price: 4500),
-    Room(number: '103', type: 'GL', status: 'Sale', price: 4000),
-    Room(number: '201', type: 'GL', status: 'Libre', price: 5000),
-    Room(number: '202', type: 'LD', status: 'Occupée', price: 5500),
+class _HotelHomeScreenState extends State<HotelHomeScreen> {
+  // Liste des chambres d'exemple
+  final List<Map<String, dynamic>> _rooms = [
+    {'number': '101', 'type': 'GL', 'status': 'Libre', 'price': 3000},
+    {'number': '102', 'type': 'LD', 'status': 'Occupée', 'price': 4500},
+    {'number': '103', 'type': 'GL', 'status': 'Sale', 'price': 3000},
+    {'number': '104', 'type': 'LD', 'status': 'Libre', 'price': 4500},
   ];
 
-  double get totalRevenue {
-    return rooms
-        .where((r) => r.status == 'Occupée')
-        .fold(0, (sum, item) => sum + item.price);
-  }
-
-  Color getStatusColor(String status) {
+  Color _getStatusColor(String status) {
     switch (status) {
       case 'Libre':
         return Colors.green;
@@ -73,130 +50,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _showEditDialog(Room room) {
-    final noteController = TextEditingController(text: room.notes);
-    String selectedStatus = room.status;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulWidget(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text('Chambre ${room.number} (${room.type})'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButton<String>(
-                    value: selectedStatus,
-                    isExpanded: true,
-                    items: ['Libre', 'Occupée', 'Sale'].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
-                    onChanged: (newValue) {
-                      setDialogState(() {
-                        selectedStatus = newValue!;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: noteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Notes / Observations',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Annuler'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      room.status = selectedStatus;
-                      room.notes = noteController.text;
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Enregistrer'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tableau de Bord Hôtel'),
+        title: const Text('Tableau de Bord Hôtel 🏨'),
         backgroundColor: Colors.blueAccent,
         foregroundColor: Colors.white,
       ),
-      body: Column(
-        children: [
-          // En-tête : Chiffre d'affaires
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.blue.shade50,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Recette du jour :',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '${totalRevenue.toStringAsFixed(0)} DZD',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
+      body: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 1.2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+          ),
+          itemCount: _rooms.length,
+          itemBuilder: (context, index) {
+            final room = _rooms[index];
+            return Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _getStatusColor(room['status']),
+                    width: 2,
                   ),
                 ),
-              ],
-            ),
-          ),
-          // Liste des chambres
-          Expanded(
-            child: ListView.builder(
-              itemCount: rooms.length,
-              itemBuilder: (context, index) {
-                final room = rooms[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: getStatusColor(room.status),
-                      child: Text(
-                        room.type,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Chambre ${room['number']}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    title: Text('Chambre ${room.number}'),
-                    subtitle: Text(
-                      'Statut : ${room.status}\nTarif : ${room.price.toStringAsFixed(0)} DZD'
-                      '${room.notes != null && room.notes!.isNotEmpty ? "\nNote : ${room.notes}" : ""}',
+                    const SizedBox(height: 5),
+                    Text('Type : ${room['type']}'),
+                    Text('${room['price']} DZD / nuit'),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(room['status']),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        room['status'],
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                    isThreeLine: true,
-                    trailing: const Icon(Icons.edit),
-                    onTap: () => _showEditDialog(room),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
