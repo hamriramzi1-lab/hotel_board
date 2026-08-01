@@ -30,6 +30,7 @@ class Room {
   final double price;
   RoomStatus status;
   String? pairedWith;
+  double billedAmount;
 
   Room({
     required this.number,
@@ -37,7 +38,16 @@ class Room {
     required this.price,
     this.status = RoomStatus.libre,
     this.pairedWith,
+    this.billedAmount = 0.0,
   });
+}
+
+// Classe pour stocker l'historique d'un jour passé
+class DailyHistory {
+  final String date;
+  final double amount;
+
+  DailyHistory({required this.date, required this.amount});
 }
 
 class HotelHomeScreen extends StatefulWidget {
@@ -71,21 +81,28 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   ];
 
   double totalRecette = 0.0;
+  List<DailyHistory> historyList = []; // Liste de l'historique des jours passés
+
   Room? selectedGLForCouple;
   bool isCoupleMode = false;
 
-  Timer? _timer;
-  int _lastDay = DateTime.now().day;
+  Timer? _midnightTimer;
+  DateTime _currentDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    // Clôture automatique du total à minuit
-    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    // Clôture automatique à minuit + Sauvegarde dans l'historique
+    _midnightTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       final now = DateTime.now();
-      if (now.day != _lastDay) {
+      if (now.day != _currentDate.day) {
         setState(() {
-          _lastDay = now.day;
+          // Sauvegarder le total du jour qui s'achève
+          final formattedDate = "${_currentDate.day}/${_currentDate.month}/${_currentDate.year}";
+          historyList.insert(0, DailyHistory(date: formattedDate, amount: totalRecette));
+          
+          // Réinitialiser pour la nouvelle journée
+          _currentDate = now;
           totalRecette = 0.0;
         });
       }
@@ -94,12 +111,59 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _midnightTimer?.cancel();
     super.dispose();
+  }
+
+  // Afficher la boîte de dialogue de l'historique
+  void _showHistoryDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.history, color: Colors.blueAccent),
+            SizedBox(width: 8),
+            Text('Historique des Recettes'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: historyList.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('Aucune journée enregistrée dans l\'historique pour l\'instant.',
+                      textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: historyList.length,
+                  itemBuilder: (context, index) {
+                    final item = historyList[index];
+                    return ListTile(
+                      leading: const Icon(Icons.calendar_today, size: 20),
+                      title: Text('Date : ${item.date}'),
+                      trailing: Text(
+                        '${item.amount.toStringAsFixed(0)} DA',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final dateStr = "${_currentDate.day}/${_currentDate.month}/${_currentDate.year}";
     final libresGL = rooms.where((r) => r.status == RoomStatus.libre && (r.type == 'GL' || r.type == 'Suite')).toList();
     final libresLD = rooms.where((r) => r.status == RoomStatus.libre && r.type == 'LD').toList();
     final occupees = rooms.where((r) => r.status == RoomStatus.occupee).toList();
@@ -114,23 +178,40 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
       ),
       body: Column(
         children: [
+          // Banner Recette + Date + Bouton Historique
           Container(
             padding: const EdgeInsets.all(16.0),
             color: Colors.blue.shade50,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Total Recette du Jour :', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                    Text(
-                      '${totalRecette.toStringAsFixed(0)} DA',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('📅 Date : $dateStr', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                        const SizedBox(height: 2),
+                        const Text('Total Recette du Jour :', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                        Text(
+                          '${totalRecette.toStringAsFixed(0)} DA',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green),
+                        ),
+                      ],
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _showHistoryDialog,
+                      icon: const Icon(Icons.history, size: 18),
+                      label: const Text('Historique'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ],
                 ),
-                if (isCoupleMode)
+                if (isCoupleMode) ...[
+                  const SizedBox(height: 10),
                   Chip(
                     avatar: const Icon(Icons.add_circle, color: Colors.white),
                     label: Text('Couple: Ch ${selectedGLForCouple?.number} + LD ?'),
@@ -143,6 +224,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                       });
                     },
                   ),
+                ],
               ],
             ),
           ),
@@ -227,7 +309,7 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                       ),
                       Text('${room.price.toStringAsFixed(0)} DA', style: const TextStyle(fontSize: 12, color: Colors.black87)),
                       if (room.pairedWith != null)
-                        Text('↳ Couple: ${room.pairedWith}', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
+                        Text('↳ Linked: ${room.pairedWith}', style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -256,46 +338,97 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   }
 
   void _handleRoomTap(Room room) {
-    setState(() {
-      // 1. SI LA CHAMBRE EST LIBRE
-      if (room.status == RoomStatus.libre) {
+    if (room.status == RoomStatus.libre) {
+      setState(() {
         if (isCoupleMode) {
           if (room.type == 'LD' && selectedGLForCouple != null) {
             final glRoom = selectedGLForCouple!;
-            
+
             glRoom.status = RoomStatus.occupee;
             glRoom.pairedWith = room.number;
+            glRoom.billedAmount = glRoom.price;
 
             room.status = RoomStatus.occupee;
             room.pairedWith = glRoom.number;
+            room.billedAmount = 0.0;
 
-            // PRIX COUPLE : On ajoute UNIQUEMENT le prix de la chambre GL (5000 DA)
             totalRecette += glRoom.price;
 
             isCoupleMode = false;
             selectedGLForCouple = null;
           }
         } else {
-          // Location seule
           room.status = RoomStatus.occupee;
+          room.billedAmount = room.price;
           totalRecette += room.price;
         }
-      } 
-      // 2. SI LA CHAMBRE EST OCCUPÉE (Départ unique)
-      else if (room.status == RoomStatus.occupee) {
-        room.status = RoomStatus.sale;
-
-        // Si elle était liée à un couple, on retire le lien sur la chambre qui part
-        // L'autre chambre du couple RESTERA occupée séparément.
-        if (room.pairedWith != null) {
-          final pairedRoom = rooms.firstWhere((r) => r.number == room.pairedWith, orElse: () => room);
-          pairedRoom.pairedWith = null;
-          room.pairedWith = null;
-        }
-      } 
-      // 3. SI LA CHAMBRE EST SALE (Nettoyée)
-      else if (room.status == RoomStatus.sale) {
+      });
+    } else if (room.status == RoomStatus.occupee) {
+      showModalBottomSheet(
+        context: context,
+        builder: (BuildContext context) {
+          return SafeArea(
+            child: Wrap(
+              children: <Widget>[
+                ListTile(
+                  leading: const Icon(Icons.cleaning_services, color: Colors.orange),
+                  title: const Text('Départ client (Envoyer en chambre Sale)'),
+                  subtitle: const Text('La chambre se libère seule, le montant reste comptabilisé'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _checkoutSingleRoom(room);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cancel, color: Colors.red),
+                  title: const Text('Annuler la réservation'),
+                  subtitle: const Text('Remets la chambre en libre et déduit le prix du total'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _cancelReservation(room);
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } else if (room.status == RoomStatus.sale) {
+      setState(() {
         room.status = RoomStatus.libre;
+      });
+    }
+  }
+
+  void _checkoutSingleRoom(Room room) {
+    setState(() {
+      room.status = RoomStatus.sale;
+      room.billedAmount = 0.0;
+
+      if (room.pairedWith != null) {
+        final otherRoomIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
+        if (otherRoomIndex != -1) {
+          rooms[otherRoomIndex].pairedWith = null;
+        }
+        room.pairedWith = null;
+      }
+    });
+  }
+
+  void _cancelReservation(Room room) {
+    setState(() {
+      totalRecette -= room.billedAmount;
+      if (totalRecette < 0) totalRecette = 0.0;
+
+      room.status = RoomStatus.libre;
+      room.billedAmount = 0.0;
+
+      if (room.pairedWith != null) {
+        final otherRoomIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
+        if (otherRoomIndex != -1) {
+          rooms[otherRoomIndex].pairedWith = null;
+        }
+        room.pairedWith = null;
       }
     });
   }
