@@ -1,4 +1,5 @@
-Import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
 
 void main() {
   runApp(const HotelApp());
@@ -29,6 +30,7 @@ class Room {
   final double price;
   RoomStatus status;
   String? pairedWith;
+  double priceCharged; // Sauvegarde le prix réellement facturé
 
   Room({
     required this.number,
@@ -36,7 +38,15 @@ class Room {
     required this.price,
     this.status = RoomStatus.libre,
     this.pairedWith,
+    this.priceCharged = 0.0,
   });
+}
+
+class DailyHistory {
+  final String date;
+  final double amount;
+
+  DailyHistory({required this.date, required this.amount});
 }
 
 class HotelHomeScreen extends StatefulWidget {
@@ -70,11 +80,85 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   ];
 
   double totalRecette = 0.0;
+  List<DailyHistory> historyList = [];
+
   Room? selectedGLForCouple;
   bool isCoupleMode = false;
 
+  Timer? _midnightTimer;
+  DateTime _currentDate = DateTime.now();
+
+  @override
+  void initState() {
+    super.initState();
+    // Verification chaque minute si on change de jour (Minuit)
+    _midnightTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      final now = DateTime.now();
+      if (now.day != _currentDate.day) {
+        setState(() {
+          final formattedDate = "${_currentDate.day}/${_currentDate.month}/${_currentDate.year}";
+          historyList.insert(0, DailyHistory(date: formattedDate, amount: totalRecette));
+          _currentDate = now;
+          totalRecette = 0.0;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _midnightTimer?.cancel();
+    super.dispose();
+  }
+
+  void _showHistoryDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.history, color: Colors.blueAccent),
+            SizedBox(width: 8),
+            Text('Historique des Recettes'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: historyList.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('Aucune journée archivée pour le moment.',
+                      textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: historyList.length,
+                  itemBuilder: (context, index) {
+                    final item = historyList[index];
+                    return ListTile(
+                      leading: const Icon(Icons.calendar_today, size: 20),
+                      title: Text('Date : ${item.date}'),
+                      trailing: Text(
+                        '${item.amount.toStringAsFixed(0)} DA',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fermer'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final dateStr = "${_currentDate.day}/${_currentDate.month}/${_currentDate.year}";
     final libresGL = rooms.where((r) => r.status == RoomStatus.libre && (r.type == 'GL' || r.type == 'Suite')).toList();
     final libresLD = rooms.where((r) => r.status == RoomStatus.libre && r.type == 'LD').toList();
     final occupees = rooms.where((r) => r.status == RoomStatus.occupee).toList();
@@ -98,6 +182,8 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text('📅 Date : $dateStr', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                    const SizedBox(height: 2),
                     const Text('Total Recette (Cumul) :', style: TextStyle(fontSize: 14, color: Colors.grey)),
                     Text(
                       '${totalRecette.toStringAsFixed(0)} DA',
@@ -105,19 +191,28 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
                     ),
                   ],
                 ),
-                if (isCoupleMode)
-                  Chip(
-                    avatar: const Icon(Icons.add_circle, color: Colors.white),
-                    label: Text('Couple: GL ${selectedGLForCouple?.number} + LD ?'),
-                    backgroundColor: Colors.orange,
-                    labelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    onDeleted: () {
-                      setState(() {
-                        isCoupleMode = false;
-                        selectedGLForCouple = null;
-                      });
-                    },
-                  ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.history, color: Colors.blueAccent),
+                      onPressed: _showHistoryDialog,
+                      tooltip: 'Voir Historique',
+                    ),
+                    if (isCoupleMode)
+                      Chip(
+                        avatar: const Icon(Icons.add_circle, color: Colors.white),
+                        label: Text('Couple: GL ${selectedGLForCouple?.number} + LD ?'),
+                        backgroundColor: Colors.orange,
+                        labelStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        onDeleted: () {
+                          setState(() {
+                            isCoupleMode = false;
+                            selectedGLForCouple = null;
+                          });
+                        },
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -231,35 +326,103 @@ class _HotelHomeScreenState extends State<HotelHomeScreen> {
   }
 
   void _handleRoomTap(Room room) {
-    setState(() {
-      if (room.status == RoomStatus.libre) {
+    if (room.status == RoomStatus.libre) {
+      setState(() {
         if (isCoupleMode) {
           if (room.type == 'LD' && selectedGLForCouple != null) {
             final glRoom = selectedGLForCouple!;
+            
+            // 1. Occupation et liaison identique à ton code original
             glRoom.status = RoomStatus.occupee;
             glRoom.pairedWith = room.number;
+            glRoom.priceCharged = glRoom.price; // 5000 DA sur la GL
 
             room.status = RoomStatus.occupee;
             room.pairedWith = glRoom.number;
+            room.priceCharged = 0.0; // 0 DA sur la LD (évite l'addition double)
 
-            totalRecette += glRoom.price;
+            // 2. Addition unique de la GL
+            totalRecette += glRoom.priceCharged;
 
             isCoupleMode = false;
             selectedGLForCouple = null;
           }
         } else {
+          // Réservation simple classique
           room.status = RoomStatus.occupee;
-          totalRecette += room.price;
+          room.priceCharged = room.price;
+          totalRecette += room.priceCharged;
         }
-      } else if (room.status == RoomStatus.occupee) {
-        room.status = RoomStatus.sale;
-        if (room.pairedWith != null) {
-          final pairedRoom = rooms.firstWhere((r) => r.number == room.pairedWith);
-          pairedRoom.status = RoomStatus.sale;
-          pairedRoom.pairedWith = null;
-          room.pairedWith = null;
-        }
-      } else if (room.status == RoomStatus.sale) {
+      });
+    } else if (room.status == RoomStatus.occupee) {
+      // Menu au clic sur chambre occupée
+      showModalBottomSheet(
+        context: context,
+        builder: (BuildContext context) {
+          return SafeArea(
+            child: Wrap(
+              children: <Widget>[
+                ListTile(
+                  leading: const Icon(Icons.cleaning_services, color: Colors.orange),
+                  title: const Text('Départ client (Envoyer en chambre Sale)'),
+                  subtitle: const Text('Seule CETTE chambre passe en sale, le paiement reste encaissé.'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _checkoutSingleRoom(room);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.cancel, color: Colors.red),
+                  title: const Text('Annuler la réservation'),
+                  subtitle: const Text('Remets la chambre en libre et rembourse le prix exact du total.'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _cancelReservation(room);
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    } else if (room.status == RoomStatus.sale) {
+      setState(() {
         room.status = RoomStatus.libre;
+      });
+    }
+  }
+
+  // Action 1: Départ chambre par chambre (La chambre jumelle reste occupée si elle est encore là)
+  void _checkoutSingleRoom(Room room) {
+    setState(() {
+      room.status = RoomStatus.sale;
+
+      if (room.pairedWith != null) {
+        final pairedIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
+        if (pairedIndex != -1) {
+          rooms[pairedIndex].pairedWith = null; // On délie
+        }
+        room.pairedWith = null;
       }
     });
+  }
+
+  // Action 2: Annulation (Déduit l'argent et rend la chambre libre)
+  void _cancelReservation(Room room) {
+    setState(() {
+      totalRecette -= room.priceCharged;
+      if (totalRecette < 0) totalRecette = 0.0;
+
+      room.status = RoomStatus.libre;
+      room.priceCharged = 0.0;
+
+      if (room.pairedWith != null) {
+        final pairedIndex = rooms.indexWhere((r) => r.number == room.pairedWith);
+        if (pairedIndex != -1) {
+          rooms[pairedIndex].pairedWith = null;
+        }
+        room.pairedWith = null;
+      }
+    });
+  }
+}
